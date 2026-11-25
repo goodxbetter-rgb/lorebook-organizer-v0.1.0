@@ -1,0 +1,111 @@
+/* Lorebook Organizer */
+.lbo-settings-row { margin: 8px 0; }
+.lbo-settings-actions { display:flex; gap:8px; }
+.lbo-overlay {
+    display:none; position:fixed; inset:0; z-index:100500;
+    background:rgba(0,0,0,.72); backdrop-filter:blur(5px);
+    align-items:center; justify-content:center; padding:20px;
+}
+.lbo-overlay.is-open { display:flex; }
+body.lbo-modal-open { overflow:hidden !important; }
+.lbo-window {
+    width:min(1120px, 96vw); height:min(780px, 92vh); min-height:420px;
+    display:flex; flex-direction:column; overflow:hidden;
+    color:var(--SmartThemeBodyColor, #e8e5df);
+    background:var(--SmartThemeBlurTintColor, #17191d);
+    border:1px solid var(--SmartThemeBorderColor, #454545);
+    border-radius:16px; box-shadow:0 24px 90px rgba(0,0,0,.55);
+    font-family:inherit;
+}
+.lbo-topbar { display:flex; align-items:center; justify-content:space-between; padding:15px 19px; border-bottom:1px solid var(--SmartThemeBorderColor, #383838); }
+.lbo-brand { display:flex; align-items:center; gap:12px; }
+.lbo-brand-icon { width:38px; height:38px; display:grid; place-items:center; border-radius:11px; background:rgba(195,154,98,.16); color:#c39a62; font-size:23px; }
+.lbo-brand strong { display:block; font-size:16px; letter-spacing:.2px; }
+.lbo-brand small { display:block; margin-top:2px; opacity:.55; font-size:11px; }
+.lbo-top-actions { display:flex; gap:7px; }
+.lbo-icon-btn { border:1px solid transparent; border-radius:8px; width:34px; height:34px; color:inherit; background:transparent; cursor:pointer; font-size:17px; }
+.lbo-icon-btn:hover { background:rgba(255,255,255,.08); }
+.lbo-tabs { display:flex; gap:5px; padding:9px 18px 0; border-bottom:1px solid var(--SmartThemeBorderColor, #383838); }
+.lbo-tab { padding:10px 15px; border:0; border-bottom:2px solid transparent; color:inherit; background:transparent; opacity:.62; cursor:pointer; }
+.lbo-tab.active { opacity:1; color:#d5ad79; border-bottom-color:#c39a62; }
+.lbo-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 18px; border-bottom:1px solid var(--SmartThemeBorderColor, #383838); }
+.lbo-breadcrumb { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; opacity:.65; }
+.lbo-toolbar-actions { display:flex; align-items:center; gap:7px; }
+.lbo-toolbar input, .lbo-entry-toolbar select {
+    min-width:170px; max-width:230px; padding:8px 10px; border-radius:8px;
+    border:1px solid var(--SmartThemeBorderColor, #555); color:inherit;
+    background:rgba(0,0,0,.16); outline:none;
+}
+.lbo-primary, .lbo-secondary, .lbo-folder-manage button {
+    border:1px solid rgba(195,154,98,.45); border-radius:8px; padding:8px 11px;
+    background:rgba(195,154,98,.13); color:inherit; cursor:pointer; white-space:nowrap;
+}
+.lbo-primary:hover, .lbo-secondary:hover, .lbo-folder-manage button:hover { background:rgba(195,154,98,.25); }
+.lbo-folder-manage { display:flex; gap:5px; }
+.lbo-folder-manage button { padding:7px 9px; font-size:11px; }
+.lbo-body { display:flex; flex:1; min-height:0; }
+.lbo-sidebar { width:245px; flex:0 0 245px; padding:15px 11px; overflow:auto; border-right:1px solid var(--SmartThemeBorderColor, #383838); background:rgba(0,0,0,.10); }
+.lbo-sidebar-head { padding:0 9px 10px; font-size:10px; letter-spacing:1.3px; opacity:.42; font-weight:700; }
+.lbo-folder-tree { display:flex; flex-direction:column; gap:3px; }
+.lbo-folder-node { display:flex; align-items:center; gap:9px; width:100%; min-width:0; padding:8px 9px; border:0; border-radius:7px; color:inherit; background:transparent; text-align:left; cursor:pointer; font-size:12px; }
+.lbo-folder-node:hover { background:rgba(255,255,255,.06); }
+.lbo-folder-node.is-active { background:rgba(195,154,98,.17); color:#e1bd8f; }
+.lbo-folder-glyph { width:15px; color:#c39a62; text-align:center; }
+.lbo-folder-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lbo-tree-children { margin-left:13px; padding-left:7px; border-left:1px solid rgba(195,154,98,.2); }
+.lbo-unfiled { margin-top:8px; opacity:.75; }
+.lbo-main { display:flex; flex:1; min-width:0; flex-direction:column; overflow:hidden; }
+.lbo-content-head { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:18px 21px 12px; }
+.lbo-content-head h2 { margin:0; font-size:18px; font-weight:650; }
+.lbo-content-head p { margin:4px 0 0; opacity:.5; font-size:11px; }
+.lbo-count { padding:5px 9px; border-radius:20px; background:rgba(255,255,255,.06); font-size:11px; opacity:.7; white-space:nowrap; }
+.lbo-content { flex:1; overflow:auto; padding:5px 20px 20px; }
+.lbo-book-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; }
+.lbo-book-card { display:flex; align-items:center; gap:11px; min-width:0; padding:13px; border:1px solid var(--SmartThemeBorderColor, #3e4145); border-radius:11px; background:rgba(255,255,255,.025); }
+.lbo-book-card:hover, .lbo-book-card.is-selected { border-color:rgba(195,154,98,.65); background:rgba(195,154,98,.07); }
+.lbo-card-icon { flex:0 0 38px; width:38px; height:42px; display:grid; place-items:center; border-radius:8px; color:#d6ad79; background:rgba(195,154,98,.14); font-size:22px; }
+.lbo-card-info { display:flex; flex:1; min-width:0; flex-direction:column; gap:4px; }
+.lbo-card-info strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+.lbo-card-info small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; opacity:.48; }
+.lbo-card-actions { display:flex; align-items:center; gap:3px; }
+.lbo-card-actions button { padding:5px 7px; border:0; border-radius:6px; background:rgba(255,255,255,.07); color:inherit; cursor:pointer; font-size:10px; }
+.lbo-card-actions button:hover { background:rgba(195,154,98,.2); }
+.lbo-card-actions .lbo-more { font-size:16px; }
+.lbo-entry-toolbar { display:flex; justify-content:space-between; align-items:center; gap:10px; margin:0 0 10px; }
+.lbo-entry-toolbar select { max-width:360px; }
+.lbo-entry-list { display:flex; flex-direction:column; gap:7px; }
+.lbo-entry-row { display:flex; align-items:center; gap:11px; padding:11px 12px; border:1px solid var(--SmartThemeBorderColor, #3e4145); border-radius:9px; background:rgba(255,255,255,.025); }
+.lbo-entry-row:hover { border-color:rgba(195,154,98,.48); }
+.lbo-entry-icon { flex:0 0 28px; width:28px; height:28px; display:grid; place-items:center; border-radius:7px; background:rgba(195,154,98,.12); color:#d6ad79; font-size:18px; }
+.lbo-entry-info { flex:1; min-width:0; }
+.lbo-entry-info strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+.lbo-entry-info small { display:block; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; opacity:.5; }
+.lbo-entry-info p { margin:5px 0 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; opacity:.42; }
+.lbo-entry-actions select { max-width:190px; min-width:130px; padding:7px; border:1px solid var(--SmartThemeBorderColor, #555); border-radius:7px; color:inherit; background:rgba(0,0,0,.2); font-size:10px; }
+.lbo-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; min-height:220px; text-align:center; opacity:.55; }
+.lbo-empty div { font-size:35px; color:#c39a62; }
+.lbo-empty strong { font-size:13px; }
+.lbo-empty span { font-size:11px; }
+.lbo-footer { display:flex; justify-content:space-between; gap:10px; padding:9px 18px; border-top:1px solid var(--SmartThemeBorderColor, #383838); font-size:10px; opacity:.45; }
+@media (max-width:700px) {
+    .lbo-overlay { padding:0; }
+    .lbo-window { width:100vw; height:100dvh; max-height:100dvh; border-radius:0; min-height:0; }
+    .lbo-toolbar { align-items:stretch; flex-direction:column; }
+    .lbo-toolbar-actions { width:100%; flex-wrap:wrap; }
+    .lbo-toolbar input { flex:1; min-width:100px; max-width:none; }
+    .lbo-sidebar { width:125px; flex-basis:125px; padding:12px 6px; }
+    .lbo-folder-node { gap:5px; padding:8px 5px; font-size:10px; }
+    .lbo-content-head { padding:14px 12px 9px; }
+    .lbo-content { padding:5px 10px 15px; }
+    .lbo-book-grid { grid-template-columns:1fr; }
+    .lbo-book-card { padding:10px; }
+    .lbo-entry-row { align-items:flex-start; flex-wrap:wrap; }
+    .lbo-entry-info { min-width:calc(100% - 45px); }
+    .lbo-entry-actions { width:100%; padding-left:39px; }
+    .lbo-entry-actions select { width:100%; max-width:none; }
+    .lbo-entry-toolbar { align-items:stretch; flex-direction:column; }
+    .lbo-entry-toolbar select { max-width:none; width:100%; }
+    .lbo-folder-manage { width:100%; }
+    .lbo-folder-manage button { flex:1; }
+    .lbo-footer { font-size:9px; }
+}
