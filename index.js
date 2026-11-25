@@ -9,7 +9,9 @@
     const EXT = 'LorebookOrganizer';
     const ROOT_ID = 'lbo-root';
     const STYLE_ID = 'lbo-style-loaded';
-    const DEFAULTS = { books: {}, entryFolders: {}, lastTab: 'books' };
+    const DEFAULTS = { books: {}, bookFolders: [], entryFolders: {}, lastTab: 'books' };
+    const MAX_FOLDER_DEPTH = 2;
+    let renderToken = 0;
     let ctx;
     let currentTab = 'books';
     let currentBook = '';
@@ -35,10 +37,11 @@
         }
         s.books ??= {};
         s.entryFolders ??= {};
+        s.bookFolders ??= [];
         return s;
     }
     function saveSettings() {
-        ctx.saveSettingsDebounced();
+        ctx.saveSettingsDebounced?.();
     }
     function toast(type, message) {
         if (window.toastr?.[type]) window.toastr[type](message, 'Lorebook Organizer');
@@ -62,23 +65,35 @@
     }
     function addFolderPath(paths, path) {
         const p = normPath(path);
-        if (!p) return paths;
+        if (!p || pathDepth(p) > MAX_FOLDER_DEPTH) return allFolderPaths(paths);
         return allFolderPaths([...paths, p]);
+    }
+    function validFolderPath(path) {
+        const p = normPath(path);
+        if (!p) return true;
+        if (pathDepth(p) > MAX_FOLDER_DEPTH) {
+            toast('warning', `Folders can be nested up to ${MAX_FOLDER_DEPTH} levels.`);
+            return false;
+        }
+        return true;
     }
     function getBookFolder(name) {
         return normPath(settings().books[name] || '');
     }
     function setBookFolder(name, folder) {
         const p = normPath(folder);
+        if (!validFolderPath(p)) return false;
         if (p) settings().books[name] = p;
         else delete settings().books[name];
         saveSettings();
+        return true;
     }
     function getEntryFolder(book, entry) {
         return normPath(entry?.extensions?.lorebook_folder || '');
     }
     function setEntryFolder(entry, folder) {
         const p = normPath(folder);
+        if (!validFolderPath(p)) return false;
         if (p) {
             entry.extensions = (entry.extensions && typeof entry.extensions === 'object') ? entry.extensions : {};
             entry.extensions.lorebook_folder = p;
@@ -86,6 +101,7 @@
             delete entry.extensions.lorebook_folder;
             if (!Object.keys(entry.extensions).length) delete entry.extensions;
         }
+        return true;
     }
     function entryFolderList(book, data) {
         const paths = [...(settings().entryFolders[book] || [])];
@@ -96,8 +112,10 @@
         return allFolderPaths(paths);
     }
     async function getBooks() {
+        if (typeof ctx?.getWorldInfoNames !== 'function') throw new Error('This SillyTavern version does not expose getWorldInfoNames().');
         const names = await ctx.getWorldInfoNames();
         cachedBooks = Array.isArray(names) ? names.slice().sort((a, b) => a.localeCompare(b)) : [];
+        if (currentBook && !cachedBooks.includes(currentBook)) currentBook = '';
         return cachedBooks;
     }
     async function loadBook(name) {
@@ -114,48 +132,54 @@
         return data;
     }
     async function saveBook(name, data) {
-        const payload = { ...data, name };
-        const response = await fetch('/api/worldinfo/edit', {
-            method: 'POST',
-            headers: ctx.getRequestHeaders(),
-            body: JSON.stringify({ name, data: payload }),
-        });
-        if (!response.ok) throw new Error(`Saving Lorebook failed (HTTP ${response.status})`);
-        try {
-            await ctx.eventSource?.emit?.('WORLDINFO_UPDATED');
-        } catch (_) {}
+        if (typeof ctx?.saveWorldInfo !== 'function') {
+            throw new Error('This SillyTavern version does not expose saveWorldInfo(). Update SillyTavern before using entry editing.');
+        }
+        await ctx.saveWorldInfo(name, { ...data, name }, true);
+        try { await ctx.eventSource?.emit?.('WORLDINFO_UPDATED'); } catch (_) {}
     }
     function entryLabel(entry, uid) {
         return String(entry.comment || entry.name || entry.key || entry.keys?.join(', ') || `Entry ${uid}`);
     }
     function ensureFolders(book, data) {
-        const list = entryFolderList(book, data);
-        settings().entryFolders[book] = list;
-        saveSettings();
+        const list = entryFolderList(book, data).filter(p => pathDepth(p) <= MAX_FOLDER_DEPTH);
+        const old = settings().entryFolders[book] || [];
+        if (JSON.stringify(old) !== JSON.stringify(list)) {
+            settings().entryFolders[book] = list;
+            saveSettings();
+        }
         return list;
     }
 
     function mountSettingsButton() {
-        if ($('#lbo-open-settings')) return;
+        if ($('#lbo-open-settings')) return true;
         const host = $('#extensions_settings2') || $('#extensions_settings');
-        if (!host) return;
+        if (!host) return false;
         const wrap = document.createElement('div');
         wrap.className = 'lbo-settings-row';
         wrap.innerHTML = `
             <div class="inline-drawer">
-                <div class="inline-drawer-header">
+                <div class="inline-drawer-toggle inline-drawer-header">
                     <b>Lorebook Organizer</b>
-                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down"></div>
+                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                 </div>
                 <div class="inline-drawer-content">
-                    <p class="notes">Organize Lorebooks and their Entries into nested folders.</p>
+                    <p class="notes">Organize Lorebooks and their Entries into folders (up to two levels).</p>
                     <div class="lbo-settings-actions">
                         <button id="lbo-open-settings" class="menu_button">Open Organizer</button>
                     </div>
                 </div>
             </div>`;
         host.appendChild(wrap);
-        $('#lbo-open-settings', wrap)?.addEventListener('click', openManager);
+        $('#lbo-open-settings', wrap)?.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            openManager().catch(error => {
+                console.error('[Lorebook Organizer]', error);
+                toast('error', error.message || String(error));
+            });
+        });
+        return true;
     }
 
     function ensureModal() {
@@ -196,7 +220,7 @@
                 <div id="lbo-content" class="lbo-content"></div>
               </main>
             </div>
-            <footer class="lbo-footer"><span>Folders organize your library; they do not change activation behavior.</span><span>v0.1.0</span></footer>
+            <footer class="lbo-footer"><span>Folders organize your library; they do not change activation behavior.</span><span>v0.2.0</span></footer>
           </section>`;
         document.body.appendChild(root);
         root.addEventListener('click', onRootClick);
@@ -217,8 +241,9 @@
         ensureModal();
         $('#' + ROOT_ID).classList.add('is-open');
         document.body.classList.add('lbo-modal-open');
-        await getBooks();
-        render();
+        $('#lbo-content').innerHTML = '<div class="lbo-loading">Loading Lorebooks…</div>' ;
+        try { await getBooks(); render(); }
+        catch (error) { console.error('[Lorebook Organizer]', error); $('#lbo-content').innerHTML = `<div class="lbo-empty"><strong>Could not load Lorebooks</strong><span>${esc(error.message)}</span></div>`; }
     }
     function closeManager() {
         $('#' + ROOT_ID)?.classList.remove('is-open');
@@ -242,10 +267,10 @@
         render();
     }
     function render() {
+        renderToken++;
         const root = $('#' + ROOT_ID);
         if (!root) return;
         $$('.lbo-tab', root).forEach(btn => btn.classList.toggle('active', btn.dataset.tab === currentTab));
-        $('#lbo-search', root).value = '';
         if (currentTab === 'books') renderBooks();
         else renderEntries();
         addFolderControls();
@@ -274,7 +299,7 @@
     function renderBooks() {
         const root = $('#' + ROOT_ID);
         const search = ($('#lbo-search', root)?.value || '').toLowerCase();
-        const folders = allFolderPaths([...(settings().bookFolders || []), ...Object.values(settings().books)]);
+        const folders = allFolderPaths([...(settings().bookFolders || []), ...Object.values(settings().books)]).filter(p => pathDepth(p) <= MAX_FOLDER_DEPTH);
         renderFolderTree(folders);
         const selected = currentBookFolder;
         const books = cachedBooks.filter(name => {
@@ -301,6 +326,7 @@
         $('#lbo-content').innerHTML = books.length ? `<div class="lbo-book-grid">${cards}</div>` : `<div class="lbo-empty"><div>▤</div><strong>No Lorebooks here</strong><span>Create a folder or choose another location.</span></div>`;
     }
     async function renderEntries() {
+        const token = ++renderToken;
         const root = $('#' + ROOT_ID);
         const search = ($('#lbo-search', root)?.value || '').toLowerCase();
         if (!currentBook || !cachedBooks.includes(currentBook)) {
@@ -322,6 +348,7 @@
             $('#lbo-content').innerHTML = `<div class="lbo-empty"><strong>Could not load this Lorebook</strong><span>${esc(error.message)}</span></div>`;
             return;
         }
+        if (token !== renderToken || !$('#' + ROOT_ID)?.classList.contains('is-open')) return;
         const paths = ensureFolders(currentBook, data);
         renderFolderTree(paths);
         const selected = currentEntryFolder;
@@ -364,7 +391,8 @@
         if (!name) return;
         const path = normPath(selected ? `${selected}/${name}` : name);
         if (currentTab === 'books') {
-            const paths = allFolderPaths(Object.values(settings().books));
+            if (!validFolderPath(path)) return;
+            const paths = allFolderPaths([...(settings().bookFolders || []), ...Object.values(settings().books)]);
             if (paths.includes(path)) return toast('warning', 'That folder already exists.');
             // Keep empty folders in a separate list.
             settings().bookFolders ??= [];
@@ -375,6 +403,7 @@
         } else {
             if (!currentBook) return;
             const data = await loadBook(currentBook);
+            if (!validFolderPath(path)) return;
             const paths = entryFolderList(currentBook, data);
             if (paths.includes(path)) return toast('warning', 'That folder already exists.');
             settings().entryFolders[currentBook] = allFolderPaths([...paths, path]);
@@ -389,6 +418,7 @@
         const newName = promptName('Rename folder:', leafName(oldPath));
         if (!newName || newName === leafName(oldPath)) return;
         const newPath = normPath(parentPath(oldPath) ? `${parentPath(oldPath)}/${newName}` : newName);
+        if (!validFolderPath(newPath)) return;
         if (currentTab === 'books') {
             const s = settings();
             const known = allFolderPaths([...(s.bookFolders || []), ...Object.values(s.books)]);
@@ -459,16 +489,16 @@
         }
     }
     function moveBook(name, folder) {
-        setBookFolder(name, folder);
+        if (!setBookFolder(name, folder)) return;
         renderBooks();
         toast('success', `Moved "${name}".`);
     }
     async function moveEntry(uid, folder) {
-        const data = await loadBook(currentBook);
-        const entry = data.entries?.[uid];
-        if (!entry) return toast('error', 'Entry not found. Refresh and try again.');
-        setEntryFolder(entry, folder);
         try {
+            const data = await loadBook(currentBook);
+            const entry = data.entries?.[uid];
+            if (!entry) return toast('error', 'Entry not found. Refresh and try again.');
+            if (!setEntryFolder(entry, folder)) return;
             await saveBook(currentBook, data);
             ensureFolders(currentBook, data);
             toast('success', 'Entry moved.');
@@ -479,11 +509,12 @@
         }
     }
     function bookMenu(name) {
-        const choice = prompt(`Manage "${name}"\n\nEnter:\n1 = Rename folder assignment\n2 = Move to Unfiled`, '1');
+        const choice = prompt(`Manage "${name}"\n\nEnter:\n1 = Move to folder\n2 = Move to Unfiled`, '1');
         if (choice === '1') {
-            const target = promptName('Move to folder path (use / for nested folders):', getBookFolder(name));
-            if (target !== null) {
+            const target = promptName('Move to folder path (use / for one nested level):', getBookFolder(name));
+            if (target !== null && validFolderPath(target)) {
                 settings().bookFolders = allFolderPaths([...(settings().bookFolders || []), target]);
+                saveSettings();
                 moveBook(name, target);
             }
         } else if (choice === '2') moveBook(name, '');
@@ -509,7 +540,7 @@
         if (!btn) return;
         const action = btn.dataset.action;
         if (action === 'close') closeManager();
-        else if (action === 'refresh') getBooks().then(render);
+        else if (action === 'refresh') getBooks().then(render).catch(e => toast('error', e.message));
         else if (action === 'new-folder') createFolder().catch(e => toast('error', e.message));
         else if (action === 'select-folder') setCurrentFolder(btn.dataset.folder);
         else if (action === 'choose-book') {
@@ -519,7 +550,7 @@
         }
         else if (action === 'book-menu') bookMenu(btn.dataset.book);
         else if (action === 'open-native') openNativeEditor();
-        else if (action === 'rename-folder') renameFolder();
+        else if (action === 'rename-folder') { try { Promise.resolve(renameFolder()).catch(e => toast('error', e.message)); } catch (e) { toast('error', e.message); } }
         else if (action === 'delete-folder') deleteFolder().catch(e => toast('error', e.message));
     }
     function onRootChange(event) {
@@ -528,7 +559,7 @@
             currentEntryFolder = '';
             renderEntries();
         } else if (event.target.matches('[data-action="move-entry"]')) {
-            moveEntry(event.target.dataset.uid, event.target.value);
+            moveEntry(event.target.dataset.uid, event.target.value).catch(e => toast('error', e.message));
         }
     }
     function onRootInput(event) {
@@ -558,7 +589,9 @@
         const folder = target.dataset.folder === '__unfiled__' ? '' : target.dataset.folder;
         if (!data) return;
         if (data.type === 'book' && currentTab === 'books') moveBook(data.book, folder);
-        if (data.type === 'entry' && currentTab === 'entries' && data.book === currentBook) await moveEntry(data.uid, folder);
+        if (data.type === 'entry' && currentTab === 'entries' && data.book === currentBook) {
+            try { await moveEntry(data.uid, folder); } catch (error) { toast('error', error.message); }
+        }
     }
 
     function addFolderControls() {
@@ -571,26 +604,44 @@
         toolbar.appendChild(manage);
     }
 
-    async function init() {
+    function init() {
         if (!window.SillyTavern?.getContext) {
-            console.warn('[Lorebook Organizer] SillyTavern context unavailable.');
-            return;
+            console.warn('[Lorebook Organizer] SillyTavern context unavailable; retrying when the app is ready.');
+            return false;
         }
         ctx = window.SillyTavern.getContext();
+        if (!ctx?.extensionSettings || !ctx?.getWorldInfoNames) {
+            console.error('[Lorebook Organizer] Required SillyTavern context methods are unavailable.');
+            return false;
+        }
         settings();
         mountSettingsButton();
-        // Extensions settings can be rendered after this script on some builds.
-        const observer = new MutationObserver(() => mountSettingsButton());
-        const host = $('#extensions_settings2') || $('#extensions_settings');
-        if (host) observer.observe(host, { childList: true, subtree: true });
-        if (ctx.eventSource?.on) {
+        if (!window.__lboObserver) {
+            window.__lboObserver = new MutationObserver(() => mountSettingsButton());
+            window.__lboObserver.observe(document.documentElement, { childList: true, subtree: true });
+        }
+        if (ctx.eventSource?.on && !window.__lboWorldInfoListener) {
+            window.__lboWorldInfoListener = true;
             ctx.eventSource.on('WORLDINFO_UPDATED', () => {
-                if ($('#' + ROOT_ID)?.classList.contains('is-open')) getBooks().then(render);
+                if ($('#' + ROOT_ID)?.classList.contains('is-open')) getBooks().then(render).catch(e => toast('error', e.message));
             });
         }
-        console.info('[Lorebook Organizer] Loaded v0.1.0');
+        console.info('[Lorebook Organizer] Loaded v0.2.0');
+        return true;
     }
 
-    if (window.jQuery) window.jQuery(init);
-    else document.addEventListener('DOMContentLoaded', init, { once: true });
+    function boot() {
+        if (init()) return;
+        const retry = () => { if (init()) document.removeEventListener('DOMContentLoaded', retry); };
+        document.addEventListener('DOMContentLoaded', retry, { once: true });
+        const observer = new MutationObserver(() => {
+            if (init()) observer.disconnect();
+        });
+        if (document.documentElement) observer.observe(document.documentElement, { childList: true, subtree: true });
+        window.addEventListener('load', () => init(), { once: true });
+    }
+
+    if (window.jQuery) window.jQuery(boot);
+    else if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
+    else boot();
 })();
